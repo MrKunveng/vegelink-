@@ -1,0 +1,15 @@
+# Render.com Blueprint for VegeLink.
+# Deploy: push this folder to GitHub, then on Render choose
+# "New +" -> "Blueprint" and point it at the repo.
+services:
+  - type: web
+    name: vegelink
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python server.py
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"

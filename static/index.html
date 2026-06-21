@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VegeLink — Farmer-to-Buyer Marketplace</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">🥬</span>
+    <div>
+      <div class="brand-name">VegeLink</div>
+      <div class="brand-sub">Fresh vegetables &amp; fruits · Bono supply corridor</div>
+    </div>
+  </div>
+  <div class="role-switch">
+    <label>Viewing as</label>
+    <select id="buyerSelect"></select>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button data-tab="dashboard" class="active">📊 Dashboard</button>
+  <button data-tab="market">🛒 Marketplace</button>
+  <button data-tab="nearby">📍 Nearby</button>
+  <button data-tab="orders">📦 Orders</button>
+  <button data-tab="phone">📱 Farmer USSD</button>
+  <button data-tab="transport">🚚 Transport</button>
+  <button data-tab="notifications">🔔 Activity</button>
+  <button data-tab="register">➕ Register</button>
+</nav>
+
+<main id="view"></main>
+
+<div id="toast" class="toast"></div>
+<div id="modal" class="modal-overlay hidden"><div class="modal" id="modalBody"></div></div>
+
+<script src="/app.js"></script>
+</body>
+</html>
