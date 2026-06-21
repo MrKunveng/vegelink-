@@ -26,13 +26,35 @@ const ghs = (n) => "GHS " + Number(n).toLocaleString(undefined, { maximumFractio
 const cap = (s) => (s || "").charAt(0).toUpperCase() + (s || "").slice(1);
 const PAY_ICONS = { momo: "📱", bank: "🏦", card: "💳", cod: "💵" };
 const myLocation = () => (state.buyer ? state.buyer.location : "Accra");
+const KIND_META = {
+  farmer:    { icon: "👨‍🌾", label: "Farmer",    group: "Farmers" },
+  buyer:     { icon: "🛒",   label: "Buyer",     group: "Buyers" },
+  retailer:  { icon: "🏪",   label: "Retailer",  group: "Retailers" },
+  transport: { icon: "🚚",   label: "Transport", group: "Transport owners" },
+};
+const acctKey = (a) => `${a.kind}:${a.id}`;
+const canPurchase = (u) => u && (u.kind === "buyer" || u.kind === "retailer");
+
+// Build a single login directory across all roles (ids can collide between
+// tables, so each account is tagged with its `kind`).
+async function loadAccounts() {
+  const [farmers, buyers, transport] = await Promise.all([
+    api("/api/farmers"), api("/api/buyers"), api("/api/transport"),
+  ]);
+  state.accounts = [
+    ...farmers.map(f => ({ ...f, kind: "farmer" })),
+    ...buyers.map(b => ({ ...b, kind: b.role || "buyer" })),
+    ...transport.map(t => ({ ...t, kind: "transport" })),
+  ];
+}
 
 // ---------------------------------------------------------------- auth (login / register / logout)
 function renderAuth() {
   const a = $("#authArea");
   if (state.buyer) {
-    a.innerHTML = `<div class="acct">👤 <b>${state.buyer.name}</b><br>
-        <span class="muted">${cap(state.buyer.role || "buyer")} · ${state.buyer.location}</span></div>
+    const km = KIND_META[state.buyer.kind] || KIND_META.buyer;
+    a.innerHTML = `<div class="acct">${km.icon} <b>${state.buyer.name}</b><br>
+        <span class="muted">${km.label} · ${state.buyer.location}</span></div>
       <button class="btn ghost sm" id="logoutBtn">Log out</button>`;
     $("#logoutBtn").onclick = logout;
   } else {
@@ -43,21 +65,28 @@ function renderAuth() {
   }
 }
 function openLogin() {
-  const opts = state.buyers.map(b =>
-    `<option value="${b.id}">${b.name} (${cap(b.role || "buyer")}) · ${b.location}</option>`).join("");
+  const groups = ["farmer", "buyer", "retailer", "transport"].map(kind => {
+    const rows = state.accounts.filter(a => a.kind === kind);
+    if (!rows.length) return "";
+    return `<optgroup label="${KIND_META[kind].group}">` +
+      rows.map(a => `<option value="${acctKey(a)}">${a.name} · ${a.location}</option>`).join("") +
+      `</optgroup>`;
+  }).join("");
   modal(`<h2>Log in</h2><p class="muted">Select your VegeLink account to continue.</p>
     <div class="form" style="margin-top:14px">
-      <label>Account</label><select id="loginSel">${opts}</select>
+      <label>Account</label><select id="loginSel">${groups}</select>
       <button class="btn" id="loginGo">Log in</button>
       <p class="muted" style="font-size:13px">New here? <a href="#" id="goReg">Create an account →</a></p>
     </div>`);
-  $("#loginGo").onclick = () => { const id = $("#loginSel").value; login(state.buyers.find(b => b.id == id)); };
+  $("#loginGo").onclick = () => login(state.accounts.find(a => acctKey(a) === $("#loginSel").value));
   $("#goReg").onclick = (e) => { e.preventDefault(); closeModal(); gotoTab("register"); };
 }
 function login(acct) {
   if (!acct) return;
-  state.buyer = acct; closeModal(); renderAuth();
-  toast(`Logged in as ${acct.name}`); render();
+  state.buyer = acct;
+  if (acct.kind === "farmer" && acct.phone) state.ussd.phone = acct.phone; // greet farmer in USSD
+  closeModal(); renderAuth();
+  toast(`Logged in as ${acct.name} (${KIND_META[acct.kind].label})`); render();
 }
 function logout() {
   state.buyer = null; renderAuth(); toast("Logged out"); gotoTab("dashboard");
@@ -66,7 +95,7 @@ function logout() {
 // ---------------------------------------------------------------- boot
 async function boot() {
   state.meta = await api("/api/meta");
-  state.buyers = await api("/api/buyers");
+  await loadAccounts();
   state.buyer = null;          // start logged out
   renderAuth();
 
@@ -172,6 +201,7 @@ async function loadListings() {
 
 function openOrder(id, x) {
   if (!state.buyer) { toast("Please log in to place an order"); return openLogin(); }
+  if (!canPurchase(state.buyer)) { return toast(`Logged in as ${KIND_META[state.buyer.kind].label} — only Buyers & Retailers can order. Log out to switch.`); }
   const methods = state.meta.payment_methods || { momo: "Mobile Money", bank: "Bank Transfer", card: "Card", cod: "Cash on Delivery" };
   const payOpts = Object.entries(methods)
     .map(([k, l]) => `<option value="${k}">${PAY_ICONS[k] || "💳"} ${l}</option>`).join("");
@@ -231,6 +261,8 @@ async function renderOrders(v) {
     $("#oLogin").onclick = (e) => { e.preventDefault(); openLogin(); };
     return;
   }
+  if (state.buyer.kind === "farmer") return renderFarmerOrders(v, state.buyer);
+  if (state.buyer.kind === "transport") return renderTransportOrders(v, state.buyer);
   v.innerHTML = `<p class="muted">Loading…</p>`;
   const orders = await api("/api/orders?buyer_id=" + state.buyer.id);
   if (!orders.length) { v.innerHTML = `<div class="empty">No orders yet for ${state.buyer.name}.<br>Go to the Marketplace to place one.</div>`; return; }
@@ -275,6 +307,52 @@ async function renderOrders(v) {
   });
   list.querySelectorAll("[data-rate]").forEach(b => b.onclick = () => rateModal(b.dataset.rate, v));
 }
+
+// Farmer's view: incoming orders / sales for their produce (read-only).
+async function renderFarmerOrders(v, u) {
+  v.innerHTML = `<p class="muted">Loading…</p>`;
+  const orders = await api("/api/orders?farmer_id=" + u.id);
+  if (!orders.length) {
+    v.innerHTML = `<div class="empty">No orders yet for ${u.name}.<br>List produce via the <b>📱 Farmer USSD</b> tab (dial *789#) and buyers will order.</div>`;
+    return;
+  }
+  const payLabels = { held: "Escrow held", released: "Released", cod_pending: "Cash on delivery", paid: "Paid (cash)", pending: "Pending" };
+  v.innerHTML = `<div class="hint">👨‍🌾 Incoming orders &amp; sales for <b>${u.name}</b>. Buyers confirm delivery to release your payment.</div><div></div>`;
+  const list = v.lastChild;
+  orders.forEach(o => list.appendChild(el(`
+    <div class="order">
+      <div class="order-head">
+        <div><b>${o.image} ${o.quantity} crates ${o.crop}</b> <span class="muted">· #${o.id} · buyer: ${o.buyer ? o.buyer.name + ' (' + o.buyer.location + ')' : '—'}</span></div>
+        <div>
+          <span class="pill" style="background:#eef2ef;color:#555">${PAY_ICONS[o.payment_method] || '💳'} ${o.payment_label}</span>
+          <span class="pill ${o.payment_status}">${payLabels[o.payment_status] || o.payment_status}</span>
+          <span class="pill ${o.status}">${o.status.replace('_', ' ')}</span>
+        </div>
+      </div>
+      <div class="kv"><span class="k">${o.transport ? '🚚 ' + o.transport.name + ' · ' + o.distance_km + 'km' : 'No transport'}</span><b>You earn ${ghs(o.produce_total)}</b></div>
+    </div>`)));
+}
+
+// Transport owner's view: assigned delivery jobs (read-only).
+async function renderTransportOrders(v, u) {
+  v.innerHTML = `<p class="muted">Loading…</p>`;
+  const orders = await api("/api/orders?transport_id=" + u.id);
+  if (!orders.length) {
+    v.innerHTML = `<div class="empty">No delivery jobs assigned to ${u.name} yet.<br>Jobs are auto-matched when buyers order produce near you.</div>`;
+    return;
+  }
+  v.innerHTML = `<div class="hint">🚚 Delivery jobs for <b>${u.name}</b>, auto-matched by location &amp; capacity.</div><div></div>`;
+  const list = v.lastChild;
+  orders.forEach(o => list.appendChild(el(`
+    <div class="order">
+      <div class="order-head">
+        <div><b>${o.image} ${o.quantity} crates ${o.crop}</b> <span class="muted">· job #${o.id}</span></div>
+        <span class="pill ${o.status}">${o.status.replace('_', ' ')}</span>
+      </div>
+      <div class="kv"><span class="k">📍 ${o.farmer ? o.farmer.location : '?'} → ${o.buyer ? o.buyer.location : '?'} · ${o.distance_km}km · ~${o.eta_minutes}min</span><b>Fee ${ghs(o.transport_cost)}</b></div>
+    </div>`)));
+}
+
 function rateModal(id, v) {
   modal(`<h2>⭐ Rate this farmer</h2><p class="muted">How was the produce & transaction?</p>
     <div style="font-size:34px;text-align:center;margin:18px 0" id="rStars"></div>
@@ -474,7 +552,7 @@ function renderRegForm() {
         <button class="btn" id="rSubmit">Register farmer</button>
       </div>`;
     $("#rSubmit").onclick = () => submitReg("/api/farmers",
-      { name: val("rName"), phone: val("rPhone"), location: val("rLoc"), verified: 1 }, "Farmer");
+      { name: val("rName"), phone: val("rPhone"), location: val("rLoc"), verified: 1 }, "Farmer", "farmer");
   } else if (regRole === "buyer" || regRole === "retailer") {
     const isRet = regRole === "retailer";
     const typeOpts = isRet
@@ -490,7 +568,7 @@ function renderRegForm() {
       </div>`;
     $("#rSubmit").onclick = () => submitReg("/api/buyers",
       { name: val("rName"), phone: val("rPhone"), type: val("rType"), role: regRole, location: val("rLoc") },
-      ROLES[regRole].label, true);
+      ROLES[regRole].label, regRole);
   } else if (regRole === "transport") {
     box.innerHTML = `<div class="section-title" style="margin-top:14px">🚚 Transport owner details</div>
       <div class="form" style="max-width:100%">
@@ -504,25 +582,23 @@ function renderRegForm() {
       </div>`;
     $("#rSubmit").onclick = () => submitReg("/api/transport",
       { name: val("rName"), phone: val("rPhone"), vehicle: val("rVeh"),
-        capacity_crates: val("rCap"), location: val("rLoc"), rate_per_km: val("rRate") }, "Transport");
+        capacity_crates: val("rCap"), location: val("rLoc"), rate_per_km: val("rRate") }, "Transport", "transport");
   }
 }
 
 const val = (id) => $("#" + id).value;
-async function submitReg(endpoint, body, label, isBuyerSide) {
+async function submitReg(endpoint, body, label, kind) {
   if (!body.name || !body.phone) return toast("Name and phone are required");
   const r = await post(endpoint, body);
   if (r.error) return toast("Error: " + r.error);
-  if (isBuyerSide) {
-    // buyer/retailer accounts can shop — refresh list and log them straight in
-    state.buyers = await api("/api/buyers");
-    const acct = state.buyers.find(b => b.id === r.id);
-    if (acct) { state.buyer = acct; renderAuth(); }
-    toast(`${label} registered ✓ — you're now logged in`);
-    return gotoTab("market");
-  }
-  toast(`${label} registered ✓${body.location ? " in " + body.location : ""}. Farmers list produce via USSD (*789#).`);
-  ["rName", "rPhone"].forEach(id => { const e = $("#" + id); if (e) e.value = ""; });
+  // refresh the login directory and log the new account straight in
+  await loadAccounts();
+  const acct = state.accounts.find(a => a.kind === kind && a.id === r.id);
+  if (acct) login(acct);
+  toast(`${label} registered ✓ — you're now logged in`);
+  const dest = (kind === "buyer" || kind === "retailer") ? "market"
+             : kind === "farmer" ? "phone" : "orders";
+  gotoTab(dest);
 }
 
 boot();

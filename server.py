@@ -177,6 +177,8 @@ class Handler(BaseHTTPRequestHandler):
                     sql += " AND buyer_id=?"; args.append(int(qs["buyer_id"][0]))
                 if qs.get("farmer_id"):
                     sql += " AND farmer_id=?"; args.append(int(qs["farmer_id"][0]))
+                if qs.get("transport_id"):
+                    sql += " AND transport_id=?"; args.append(int(qs["transport_id"][0]))
                 sql += " ORDER BY id DESC"
                 rows = conn.execute(sql, args).fetchall()
                 return self._send_json([order_dict(conn, r) for r in rows])
