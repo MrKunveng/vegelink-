@@ -25,26 +25,50 @@ function stars(n) { const f = Math.round(n); return "★".repeat(f) + "☆".repe
 const ghs = (n) => "GHS " + Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 });
 const cap = (s) => (s || "").charAt(0).toUpperCase() + (s || "").slice(1);
 const PAY_ICONS = { momo: "📱", bank: "🏦", card: "💳", cod: "💵" };
-const DEFAULT_USER = "Lukman Kunveng";
-function defaultActor(list) {
-  return list.find(b => b.name === DEFAULT_USER && (b.role || "buyer") === "buyer")
-      || list.find(b => b.name === DEFAULT_USER)
-      || list[0];
+const myLocation = () => (state.buyer ? state.buyer.location : "Accra");
+
+// ---------------------------------------------------------------- auth (login / register / logout)
+function renderAuth() {
+  const a = $("#authArea");
+  if (state.buyer) {
+    a.innerHTML = `<div class="acct">👤 <b>${state.buyer.name}</b><br>
+        <span class="muted">${cap(state.buyer.role || "buyer")} · ${state.buyer.location}</span></div>
+      <button class="btn ghost sm" id="logoutBtn">Log out</button>`;
+    $("#logoutBtn").onclick = logout;
+  } else {
+    a.innerHTML = `<button class="btn ghost sm" id="loginBtn">Log in</button>
+      <button class="btn sm" id="regBtn">Register</button>`;
+    $("#loginBtn").onclick = openLogin;
+    $("#regBtn").onclick = () => gotoTab("register");
+  }
 }
-function fillActorSelect() {
-  const sel = $("#buyerSelect");
-  sel.innerHTML = state.buyers.map(b =>
+function openLogin() {
+  const opts = state.buyers.map(b =>
     `<option value="${b.id}">${b.name} (${cap(b.role || "buyer")}) · ${b.location}</option>`).join("");
-  if (state.buyer) sel.value = state.buyer.id;
+  modal(`<h2>Log in</h2><p class="muted">Select your VegeLink account to continue.</p>
+    <div class="form" style="margin-top:14px">
+      <label>Account</label><select id="loginSel">${opts}</select>
+      <button class="btn" id="loginGo">Log in</button>
+      <p class="muted" style="font-size:13px">New here? <a href="#" id="goReg">Create an account →</a></p>
+    </div>`);
+  $("#loginGo").onclick = () => { const id = $("#loginSel").value; login(state.buyers.find(b => b.id == id)); };
+  $("#goReg").onclick = (e) => { e.preventDefault(); closeModal(); gotoTab("register"); };
+}
+function login(acct) {
+  if (!acct) return;
+  state.buyer = acct; closeModal(); renderAuth();
+  toast(`Logged in as ${acct.name}`); render();
+}
+function logout() {
+  state.buyer = null; renderAuth(); toast("Logged out"); gotoTab("dashboard");
 }
 
 // ---------------------------------------------------------------- boot
 async function boot() {
   state.meta = await api("/api/meta");
   state.buyers = await api("/api/buyers");
-  state.buyer = defaultActor(state.buyers);
-  fillActorSelect();
-  $("#buyerSelect").onchange = (e) => { state.buyer = state.buyers.find(b => b.id == e.target.value); render(); };
+  state.buyer = null;          // start logged out
+  renderAuth();
 
   $("#tabs").addEventListener("click", e => {
     const b = e.target.closest("button[data-tab]"); if (!b) return;
@@ -99,7 +123,7 @@ async function renderMarket(v) {
   const cropOpts = `<option value="">All crops</option>` + state.meta.crops.map(c => `<option ${filters.crop === c ? "selected" : ""}>${c}</option>`).join("");
   const locOpts = `<option value="">All locations</option>` + state.meta.locations.map(l => `<option ${filters.location === l ? "selected" : ""}>${l}</option>`).join("");
   v.innerHTML = `
-    <div class="hint">🧠 <b>Smart match</b> ranks produce by spoilage urgency + distance to you (<b>${state.buyer.location}</b>) — surfacing what to buy first to cut waste.</div>
+    <div class="hint">🧠 <b>Smart match</b> ranks produce by spoilage urgency + distance to <b>${state.buyer ? state.buyer.location : "Accra"}</b>${state.buyer ? "" : " (log in to use your location & order)"} — surfacing what to buy first to cut waste.</div>
     <div class="filters">
       <select id="fCrop">${cropOpts}</select>
       <select id="fLoc">${locOpts}</select>
@@ -118,7 +142,7 @@ async function renderMarket(v) {
   loadListings();
 }
 async function loadListings() {
-  const q = new URLSearchParams({ sort: filters.sort, buyer_location: state.buyer.location });
+  const q = new URLSearchParams({ sort: filters.sort, buyer_location: myLocation() });
   if (filters.crop) q.set("crop", filters.crop);
   if (filters.location) q.set("location", filters.location);
   if (filters.maxprice) q.set("maxprice", filters.maxprice);
@@ -147,6 +171,7 @@ async function loadListings() {
 }
 
 function openOrder(id, x) {
+  if (!state.buyer) { toast("Please log in to place an order"); return openLogin(); }
   const methods = state.meta.payment_methods || { momo: "Mobile Money", bank: "Bank Transfer", card: "Card", cod: "Cash on Delivery" };
   const payOpts = Object.entries(methods)
     .map(([k, l]) => `<option value="${k}">${PAY_ICONS[k] || "💳"} ${l}</option>`).join("");
@@ -201,6 +226,11 @@ window.gotoTab = (t) => { $(`#tabs button[data-tab="${t}"]`).click(); };
 
 // ---------------------------------------------------------------- orders
 async function renderOrders(v) {
+  if (!state.buyer) {
+    v.innerHTML = `<div class="empty">Please <a href="#" id="oLogin">log in</a> to see your orders.</div>`;
+    $("#oLogin").onclick = (e) => { e.preventDefault(); openLogin(); };
+    return;
+  }
   v.innerHTML = `<p class="muted">Loading…</p>`;
   const orders = await api("/api/orders?buyer_id=" + state.buyer.id);
   if (!orders.length) { v.innerHTML = `<div class="empty">No orders yet for ${state.buyer.name}.<br>Go to the Marketplace to place one.</div>`; return; }
@@ -259,7 +289,7 @@ function rateModal(id, v) {
 // ---------------------------------------------------------------- nearby (proximity discovery)
 const nearby = { origin: null, find: "buyers", radius: "" };
 function renderNearby(v) {
-  if (!nearby.origin) nearby.origin = state.buyer.location;
+  if (!nearby.origin) nearby.origin = myLocation();
   const locOpts = state.meta.locations.map(l => `<option ${nearby.origin === l ? "selected" : ""}>${l}</option>`).join("");
   v.innerHTML = `
     <div class="hint">📍 <b>Proximity search</b> — any actor can discover who's around them. A farmer in Akumadan finds the nearest buyers; a buyer finds nearby farms; anyone finds nearby transport. Sorted by real distance (great-circle, haversine).</div>
@@ -479,12 +509,19 @@ function renderRegForm() {
 }
 
 const val = (id) => $("#" + id).value;
-async function submitReg(endpoint, body, label, refreshActors) {
+async function submitReg(endpoint, body, label, isBuyerSide) {
   if (!body.name || !body.phone) return toast("Name and phone are required");
   const r = await post(endpoint, body);
   if (r.error) return toast("Error: " + r.error);
-  if (refreshActors) { state.buyers = await api("/api/buyers"); fillActorSelect(); }
-  toast(`${label} registered ✓` + (refreshActors ? " (now selectable up top)" : ""));
+  if (isBuyerSide) {
+    // buyer/retailer accounts can shop — refresh list and log them straight in
+    state.buyers = await api("/api/buyers");
+    const acct = state.buyers.find(b => b.id === r.id);
+    if (acct) { state.buyer = acct; renderAuth(); }
+    toast(`${label} registered ✓ — you're now logged in`);
+    return gotoTab("market");
+  }
+  toast(`${label} registered ✓${body.location ? " in " + body.location : ""}. Farmers list produce via USSD (*789#).`);
   ["rName", "rPhone"].forEach(id => { const e = $("#" + id); if (e) e.value = ""; });
 }
 

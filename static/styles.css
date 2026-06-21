@@ -23,6 +23,15 @@ select,input{font-family:inherit;font-size:14px}
 .role-switch label{font-size:11px;opacity:.85;text-transform:uppercase;letter-spacing:.5px}
 .role-switch select{border:none;border-radius:8px;padding:6px 10px;background:#fff;color:var(--ink);font-weight:600}
 
+/* ---- auth (login / register / account chip) ---- */
+.auth-area{display:flex;align-items:center;gap:10px}
+.auth-area .acct{color:#fff;font-size:14px;text-align:right;line-height:1.25}
+.auth-area .acct .muted{color:rgba(255,255,255,.82);font-size:12px}
+#authArea .btn{background:#fff;color:var(--green-d)}
+#authArea .btn:hover{background:#eef5ef}
+#authArea .btn.ghost{background:transparent;color:#fff;border:1.5px solid rgba(255,255,255,.6)}
+#authArea .btn.ghost:hover{background:rgba(255,255,255,.14)}
+
 /* ---- tabs ---- */
 .tabs{display:flex;gap:4px;padding:10px 18px 0;background:var(--card);
   border-bottom:1px solid var(--line);overflow-x:auto}
