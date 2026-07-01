@@ -163,3 +163,51 @@ main{max-width:1100px;margin:0 auto;padding:24px 20px 60px}
 .kv .k{color:var(--muted)} .kv b{font-weight:700}
 .hint{background:var(--green-l);border-left:3px solid var(--green);padding:10px 14px;border-radius:0 8px 8px 0;
   font-size:13px;color:var(--green-d);margin-bottom:16px}
+
+/* ---- links / errors / textareas ---- */
+.link{color:var(--green-d);font-size:12px;margin-left:6px;text-decoration:underline;cursor:pointer}
+.err{color:var(--tomato-d);font-size:13px;min-height:18px;margin-top:4px}
+.form textarea{width:100%;border:1px solid var(--line);border-radius:9px;padding:10px 12px;font:inherit;resize:vertical}
+
+/* ---- reviews ---- */
+.review{border-bottom:1px solid var(--line);padding:10px 0}
+.review:last-child{border-bottom:0}
+.review .msg{margin-top:3px;font-size:14px}
+
+/* ---- messaging ---- */
+.msg-thread:hover{box-shadow:0 2px 12px rgba(0,0,0,.08)}
+.thread-box{max-height:300px;overflow-y:auto;background:#f7faf7;border-radius:12px;padding:12px;
+  display:flex;flex-direction:column;gap:8px}
+.bubble{max-width:78%;padding:8px 12px;border-radius:14px;font-size:14px;line-height:1.35;word-wrap:break-word}
+.bubble.mine{align-self:flex-end;background:var(--green);color:#fff;border-bottom-right-radius:4px}
+.bubble.theirs{align-self:flex-start;background:#fff;border:1px solid var(--line);border-bottom-left-radius:4px}
+
+/* ---- responsive stat row + tab overflow affordance ---- */
+.stat-row{grid-template-columns:repeat(5,1fr)}
+@media(max-width:760px){
+  .stat-row{grid-template-columns:repeat(2,1fr)}
+  .grid.cols-4{grid-template-columns:repeat(2,1fr)}
+  .tabs{position:relative}
+}
+.tabs{-webkit-overflow-scrolling:touch}
+
+/* ---- logged-out landing / role chooser ---- */
+.landing{text-align:center;padding:18px 10px 6px}
+.landing h1{font-size:26px;line-height:1.2;margin-bottom:8px}
+.role-cards{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:16px}
+.role-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 22px;
+  cursor:pointer;min-width:140px;transition:transform .12s,box-shadow .12s;display:flex;
+  flex-direction:column;align-items:center;gap:4px}
+.role-card:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(0,0,0,.1);border-color:var(--green)}
+.role-card .ic{font-size:34px}
+.role-card b{font-size:15px}
+.role-card span{font-size:12px;color:var(--muted)}
+
+/* ---- inline offline map ---- */
+.map-box{margin-bottom:16px}
+.map-svg{width:100%;height:auto;border-radius:12px;border:1px solid var(--line);background:#eef4ee;display:block}
+.map-bg{fill:#eef4ee}
+.map-dot{fill:var(--tomato)}
+.map-lbl{font-size:2px;fill:var(--ink)}
+.map-star{font-size:5px;fill:var(--green-d)}
+.map-cap{font-size:12px;color:var(--muted);margin-top:6px}

@@ -10,6 +10,20 @@ services:
     startCommand: python server.py
     healthCheckPath: /api/health
     autoDeploy: true
+    # Persistent disk so data survives deploys/restarts (instead of re-seeding
+    # clean each boot). DB_PATH points the SQLite file at the mounted disk.
+    disk:
+      name: vegelink-data
+      mountPath: /var/data
+      sizeGB: 1
     envVars:
       - key: PYTHON_VERSION
         value: "3.12.7"
+      - key: DB_PATH
+        value: /var/data/vegelink.db
+      # --- Optional live integrations (left unset = SIMULATED, fully offline) ---
+      # - key: SMS_PROVIDER       # africastalking
+      # - key: AT_USERNAME
+      # - key: AT_API_KEY
+      # - key: PAYMENT_PROVIDER   # paystack / hubtel / momo
+      # - key: PAYMENT_API_KEY
