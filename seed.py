@@ -1,11 +1,20 @@
 """Seed VegeLink with demo data for the Akumadan->Techiman tomato corridor.
 
 Run directly (`python3 seed.py`) to reset the database to a clean demo state.
+Every demo account logs in with phone + PIN  ****1234****.
 """
 import os
 import time
 
 import db
+
+DEMO_PIN = "1234"  # all seeded accounts share this PIN for an easy demo login
+
+
+def _coords(location):
+    """Town centroid as the stand-in GPS fix for seeded accounts."""
+    lat, lng = db.LOCATIONS.get(location, (None, None))
+    return lat, lng
 
 
 def reset():
@@ -15,6 +24,7 @@ def reset():
     conn = db.connect()
     now = int(time.time())
     H = 3600
+    pin_hash, pin_salt = db.make_pin(DEMO_PIN)
 
     farmers = [
         # name, phone, location, verified, rating, rating_count
@@ -24,10 +34,12 @@ def reset():
         ("Abena Sarpong",    "0241000004", "Offinso",   1, 4.8, 31),
         ("Lukman Kunveng",   "0249111001", "Tamale",    1, 4.7, 9),   # Lukman — Farmer
     ]
-    for f in farmers:
+    for (name, phone, loc, verified, rating, rc) in farmers:
+        lat, lng = _coords(loc)
         conn.execute(
-            "INSERT INTO farmers (name,phone,location,verified,rating,rating_count,created_at)"
-            " VALUES (?,?,?,?,?,?,?)", (*f, now))
+            "INSERT INTO farmers (name,phone,location,lat,lng,pin_hash,pin_salt,"
+            "verified,rating,rating_count,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (name, phone, loc, lat, lng, pin_hash, pin_salt, verified, rating, rc, now))
 
     # buyers table holds both 'buyer' and 'retailer' roles (both purchase from farmers)
     buyers = [
@@ -38,10 +50,12 @@ def reset():
         ("Kumasi Central Retail","0551000002", "retailer",   "retailer", "Kumasi",   4.3, 8),
         ("Lukman Kunveng",       "0249111003", "retailer",   "retailer", "Tamale",   4.6, 5),  # Lukman — Retailer
     ]
-    for b in buyers:
+    for (name, phone, typ, role, loc, rating, rc) in buyers:
+        lat, lng = _coords(loc)
         conn.execute(
-            "INSERT INTO buyers (name,phone,type,role,location,rating,rating_count,created_at)"
-            " VALUES (?,?,?,?,?,?,?,?)", (*b, now))
+            "INSERT INTO buyers (name,phone,type,role,location,lat,lng,pin_hash,pin_salt,"
+            "rating,rating_count,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            (name, phone, typ, role, loc, lat, lng, pin_hash, pin_salt, rating, rc, now))
 
     transport = [
         # name, phone, vehicle, capacity, location, rate_per_km, available, rating, rating_count
@@ -50,10 +64,13 @@ def reset():
         ("Adom Cargo Ltd", "0271000003", "Cargo truck",               300, "Kumasi",   3.5, 1, 4.8, 40),
         ("Lukman Kunveng", "0249111004", "Pickup truck",              80,  "Tamale",   2.7, 1, 4.6, 11),  # Lukman — Transport
     ]
-    for t in transport:
+    for (name, phone, veh, cap, loc, rate, avail, rating, rc) in transport:
+        lat, lng = _coords(loc)
         conn.execute(
-            "INSERT INTO transport (name,phone,vehicle,capacity_crates,location,rate_per_km,"
-            "available,rating,rating_count,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)", (*t, now))
+            "INSERT INTO transport (name,phone,vehicle,capacity_crates,location,lat,lng,"
+            "pin_hash,pin_salt,rate_per_km,available,rating,rating_count,created_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (name, phone, veh, cap, loc, lat, lng, pin_hash, pin_salt, rate, avail, rating, rc, now))
 
     # Listings with varied harvest times so urgency ranking is visible.
     listings = [
@@ -76,11 +93,28 @@ def reset():
             "image,status,created_at) VALUES (?,?,?,?,?,?,?,?, 'active', ?)",
             (fid, crop, qty, "crate", price, loc, now - ago * H, img, now))
 
+    # A couple of seeded text reviews so profiles aren't empty.
+    reviews = [
+        # target_kind, target_id, author_kind, author_id, author_name, stars, body
+        ("farmer", 1, "buyer", 1, "Maa Akosua's Kitchen", 5,
+         "Tomatoes arrived firm and fresh. Kwame is reliable — will buy again."),
+        ("farmer", 4, "buyer", 2, "GreenLeaf Processors", 5,
+         "Great leafy greens, well packed. Fast pickup."),
+        ("transport", 2, "buyer", 1, "Maa Akosua's Kitchen", 4,
+         "Kofi was on time and careful with the crates."),
+    ]
+    for (tk, tid, ak, aid, an, st, body) in reviews:
+        conn.execute(
+            "INSERT INTO reviews (target_kind,target_id,author_kind,author_id,author_name,"
+            "stars,body,created_at) VALUES (?,?,?,?,?,?,?,?)",
+            (tk, tid, ak, aid, an, st, body, now))
+
     db.log_notification(conn, "app", "system", "VegeLink demo data loaded.")
     conn.commit()
     conn.close()
     print(f"Seeded database at {db.DB_PATH}")
-    print(f"  {len(farmers)} farmers, {len(buyers)} buyers, {len(transport)} transport, {len(listings)} listings")
+    print(f"  {len(farmers)} farmers, {len(buyers)} buyers, {len(transport)} transport, "
+          f"{len(listings)} listings.  Demo login PIN: {DEMO_PIN}")
 
 
 if __name__ == "__main__":
