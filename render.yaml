@@ -10,17 +10,19 @@ services:
     startCommand: python server.py
     healthCheckPath: /api/health
     autoDeploy: true
-    # Persistent disk so data survives deploys/restarts (instead of re-seeding
-    # clean each boot). DB_PATH points the SQLite file at the mounted disk.
-    disk:
-      name: vegelink-data
-      mountPath: /var/data
-      sizeGB: 1
+    # NOTE: the free plan has ephemeral storage, so the app re-seeds clean demo
+    # data on each deploy/restart (server.main seeds when the DB is missing) —
+    # perfect for a demo. For PERSISTENT data, upgrade to a paid plan and add a
+    # disk + DB_PATH (free-plan web services cannot mount a disk):
+    #   plan: starter
+    #   disk:
+    #     name: vegelink-data
+    #     mountPath: /var/data
+    #     sizeGB: 1
+    #   envVars: [ { key: DB_PATH, value: /var/data/vegelink.db } ]
     envVars:
       - key: PYTHON_VERSION
         value: "3.12.7"
-      - key: DB_PATH
-        value: /var/data/vegelink.db
       # --- Optional live integrations (left unset = SIMULATED, fully offline) ---
       # - key: SMS_PROVIDER       # africastalking
       # - key: AT_USERNAME
